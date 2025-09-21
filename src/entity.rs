@@ -25,6 +25,7 @@ pub struct Entity {
 
 const _: () = assert!(size_of::<Entity>() == size_of::<EntityData>());
 const _: () = assert!(align_of::<Entity>() == align_of::<EntityData>());
+const _: () = assert!(align_of::<u32>() <= align_of::<u64>());
 
 impl Entity {
     pub const PLACEHOLDER: Entity = Entity::new(EntityIndex::PLACEHOLDER, EntityGen::MIN);

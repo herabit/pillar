@@ -1,6 +1,5 @@
-use core::mem::offset_of;
-
 use crate::entity::{EntityGen, EntityIndex};
+use core::mem::{self, offset_of};
 
 /// The underlying data stored within an [`Entity`].
 ///
@@ -32,7 +31,6 @@ pub struct EntityData {
     // SAFETY: Do not remove, this ensures that this struct
     //         has the same alignment as a `u64`.
     pub(super) _align: [u64; 0],
-
     /// The index of the entity.
     #[cfg(target_endian = "big")]
     pub index: EntityIndex,
@@ -42,3 +40,50 @@ pub struct EntityData {
     #[cfg(target_endian = "little")]
     pub index: EntityIndex,
 }
+
+/// Something with an equivalent memory layout to [`EntityData`], but
+/// is just a plain-old-datatype.
+///
+/// It must ***always match*** the layout of [`EntityData`], but has loser
+/// bit validity requirements.
+///
+/// This is just an implementation detail for assisting a few things.
+#[derive(Clone, Copy)]
+#[repr(C)]
+#[non_exhaustive]
+pub(super) struct RawData {
+    pub(super) _align: [u64; 0],
+    #[cfg(target_endian = "big")]
+    pub(super) index: u32,
+    pub(super) generation: u32,
+    #[cfg(target_endian = "little")]
+    pub(super) index: u32,
+}
+
+#[allow(dead_code)]
+impl RawData {
+    #[inline(always)]
+    #[must_use]
+    pub(super) const fn decode(bits: u64) -> RawData {
+        // SAFETY: `RawData` and `u64` are both POD.
+        unsafe { mem::transmute(bits) }
+    }
+
+    #[inline(always)]
+    #[must_use]
+    pub(super) const fn encode(self) -> u64 {
+        // SAFETY: `RawData` and `u64` are both POD.
+        unsafe { mem::transmute(self) }
+    }
+}
+
+const _: () = {
+    // Ensure the layout constraints are the same.
+    assert!(size_of::<RawData>() == size_of::<EntityData>());
+    assert!(align_of::<RawData>() == align_of::<EntityData>());
+
+    // Ensure that the fields are the same.
+    assert!(offset_of!(RawData, _align) == offset_of!(EntityData, _align));
+    assert!(offset_of!(RawData, index) == offset_of!(EntityData, index));
+    assert!(offset_of!(RawData, generation) == offset_of!(EntityData, generation));
+};

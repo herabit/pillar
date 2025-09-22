@@ -14,8 +14,13 @@ pub use generation::*;
 #[doc(inline)]
 pub use index::*;
 
-use crate::entity::data::EntityData;
+use crate::entity::data::{EntityData, RawData};
 
+/// A pseudo-unique identifier entities.
+///
+/// # Uniqueness
+///
+/// There is a *chance* of aliasing.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Entity {
@@ -23,11 +28,14 @@ pub struct Entity {
     bits: NonZero<u64>,
 }
 
-const _: () = assert!(size_of::<Entity>() == size_of::<EntityData>());
-const _: () = assert!(align_of::<Entity>() == align_of::<EntityData>());
-const _: () = assert!(align_of::<u32>() <= align_of::<u64>());
+const _: () = {
+    assert!(size_of::<Entity>() == size_of::<EntityData>());
+    assert!(align_of::<Entity>() == align_of::<EntityData>());
+    assert!(align_of::<u32>() <= align_of::<u64>());
+};
 
 impl Entity {
+    /// A placeholder [`Entity`].
     pub const PLACEHOLDER: Entity = Entity::new(EntityIndex::PLACEHOLDER, EntityGen::MIN);
 
     /// Create a new [`Entity`] given an index and generation.
@@ -67,8 +75,51 @@ impl Entity {
     #[inline(always)]
     #[must_use]
     pub const fn to_bits(self) -> u64 {
-        // Since the index is NOT-ed as a workaround for custom niches, we need to undo that operation.
-        self.bits.get() ^ ((u32::MAX as u64) << 32)
+        // SAFETY: We guarantee that `EntityData` and `Entity` have the same memory layout
+        //         and bit validity.
+        //
+        // NOTE: I haven't checked, but I'm pretty sure this helps to convey to LLVM about
+        //       the bit validity of `Entity`. This will assist optimizations, or not at all
+        //       but still be reduced to a no-op.
+        let bits: EntityData = unsafe { mem::transmute(self) };
+
+        // SAFETY: `u64` is a plain-old-datatype and `EntityData` contains no uninit bits.
+        unsafe { mem::transmute(bits) }
+    }
+
+    // Create an [`Entity`] from its bit representation.
+    //
+    // # Returns
+    //
+    // This will return [`None`] if `bits` is not a valid [`Entity`].
+    #[inline(always)]
+    #[must_use]
+    pub const fn from_bits(bits: u64) -> Option<Entity> {
+        let RawData {
+            index, generation, ..
+        } = RawData::decode(bits);
+
+        let index = EntityIndex::from_bits(index);
+        let generation = EntityGen::from_bits(generation);
+
+        match (index, generation) {
+            (Some(index), Some(generation)) => Some(Entity::new(index, generation)),
+            _ => None,
+        }
+    }
+
+    /// Returns the index for this [`Entity`].
+    #[inline(always)]
+    #[must_use]
+    pub const fn index(self) -> EntityIndex {
+        self.data().index
+    }
+
+    /// Returns the generation for this [`Entity`].
+    #[inline(always)]
+    #[must_use]
+    pub const fn generation(self) -> EntityGen {
+        self.data().generation
     }
 }
 

@@ -1,7 +1,8 @@
 use core::fmt;
-use core::num::{NonZero, TryFromIntError};
+use core::num::NonZero;
+use core::num::TryFromIntError;
 
-/// An [`Entity`]'s index.
+/// An [`Entity`](super::Entity)'s index.
 ///
 /// # Representation
 ///
@@ -10,11 +11,7 @@ use core::num::{NonZero, TryFromIntError};
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct EntityIndex {
-    /// A bitwise NOT-ed representation of the index.
-    ///
-    /// We do this to work around the lack of custom niche values in stable Rust.
-    ///
-    /// This representation should not be relied upon.
+    /// The index incremented by one. This representation should not be relied upon.
     bits: NonZero<u32>,
 }
 
@@ -57,14 +54,16 @@ impl EntityIndex {
     #[inline(always)]
     #[must_use]
     pub const fn new(index: u32) -> Option<EntityIndex> {
-        EntityIndex::from_bits(!index)
+        // NOTE: If `index == u32::MAX`, then the result will wrap to zero.
+        //       Just in case this isn't immediately obvious to others.
+        EntityIndex::from_bits(index.wrapping_add(1))
     }
 
     /// Get the underlying value of this [`EntityIndex`].
     #[inline(always)]
     #[must_use]
     pub const fn get(self) -> u32 {
-        !self.bits.get()
+        self.bits.get() - 1
     }
 
     /// Returns whether this [`EntityIndex`] is the placeholder
@@ -100,7 +99,7 @@ impl Default for EntityIndex {
 impl PartialOrd for EntityIndex {
     #[inline(always)]
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
@@ -111,121 +110,121 @@ impl Ord for EntityIndex {
     }
 }
 
-// macro_rules! try_from {
-//     (
-//         $ty:ident
-//     ) => {
-//         impl TryFrom<$ty> for EntityIndex {
-//             type Error = TryFromIntError;
+macro_rules! try_from {
+    (
+        $ty:ident
+    ) => {
+        impl TryFrom<$ty> for EntityIndex {
+            type Error = TryFromIntError;
 
-//             #[inline(always)]
-//             fn try_from(value: $ty) -> Result<Self, Self::Error> {
-//                 let error = NonZero::try_from(0).unwrap_err();
+            #[inline(always)]
+            fn try_from(value: $ty) -> Result<Self, Self::Error> {
+                let error = NonZero::try_from(0).unwrap_err();
 
-//                 u32::try_from(value)
-//                     .map_err(From::from)
-//                     .and_then(|value| EntityIndex::new(value).ok_or(error))
-//             }
-//         }
+                u32::try_from(value)
+                    .map_err(From::from)
+                    .and_then(|value| EntityIndex::new(value).ok_or(error))
+            }
+        }
 
-//         impl TryFrom<NonZero<$ty>> for EntityIndex {
-//             type Error = TryFromIntError;
+        impl TryFrom<NonZero<$ty>> for EntityIndex {
+            type Error = TryFromIntError;
 
-//             #[inline(always)]
-//             fn try_from(value: NonZero<$ty>) -> Result<Self, Self::Error> {
-//                 value.get().try_into()
-//             }
-//         }
-//     };
-// }
+            #[inline(always)]
+            fn try_from(value: NonZero<$ty>) -> Result<Self, Self::Error> {
+                value.get().try_into()
+            }
+        }
+    };
+}
 
-// try_from!(u32);
-// try_from!(u64);
-// try_from!(u128);
-// try_from!(usize);
+try_from!(u32);
+try_from!(u64);
+try_from!(u128);
+try_from!(usize);
 
-// try_from!(i8);
-// try_from!(i16);
-// try_from!(i32);
-// try_from!(i64);
-// try_from!(i128);
-// try_from!(isize);
+try_from!(i8);
+try_from!(i16);
+try_from!(i32);
+try_from!(i64);
+try_from!(i128);
+try_from!(isize);
 
-// macro_rules! from {
-//     ($ty:ident) => {
-//         impl From<$ty> for EntityIndex {
-//             #[inline(always)]
-//             fn from(value: $ty) -> Self {
-//                 EntityIndex::new(value.into()).unwrap()
-//             }
-//         }
+macro_rules! from {
+    ($ty:ident) => {
+        impl From<$ty> for EntityIndex {
+            #[inline(always)]
+            fn from(value: $ty) -> Self {
+                EntityIndex::new(value.into()).unwrap()
+            }
+        }
 
-//         impl From<NonZero<$ty>> for EntityIndex {
-//             #[inline(always)]
-//             fn from(value: NonZero<$ty>) -> Self {
-//                 value.get().into()
-//             }
-//         }
-//     };
-// }
+        impl From<NonZero<$ty>> for EntityIndex {
+            #[inline(always)]
+            fn from(value: NonZero<$ty>) -> Self {
+                value.get().into()
+            }
+        }
+    };
+}
 
-// from!(u8);
-// from!(u16);
+from!(u8);
+from!(u16);
 
-// macro_rules! try_into {
-//     ($ty:ident) => {
-//         impl TryFrom<EntityIndex> for $ty {
-//             type Error = TryFromIntError;
+macro_rules! try_into {
+    ($ty:ident) => {
+        impl TryFrom<EntityIndex> for $ty {
+            type Error = TryFromIntError;
 
-//             #[inline(always)]
-//             fn try_from(value: EntityIndex) -> Result<Self, Self::Error> {
-//                 $ty::try_from(value.get())
-//             }
-//         }
+            #[inline(always)]
+            fn try_from(value: EntityIndex) -> Result<Self, Self::Error> {
+                $ty::try_from(value.get())
+            }
+        }
 
-//         impl TryFrom<EntityIndex> for NonZero<$ty> {
-//             type Error = TryFromIntError;
+        impl TryFrom<EntityIndex> for NonZero<$ty> {
+            type Error = TryFromIntError;
 
-//             #[inline(always)]
-//             fn try_from(value: EntityIndex) -> Result<Self, Self::Error> {
-//                 NonZero::try_from(value.get()).and_then(TryFrom::try_from)
-//             }
-//         }
-//     };
-// }
+            #[inline(always)]
+            fn try_from(value: EntityIndex) -> Result<Self, Self::Error> {
+                NonZero::try_from(value.get()).and_then(TryFrom::try_from)
+            }
+        }
+    };
+}
 
-// try_into!(u8);
-// try_into!(u16);
-// try_into!(usize);
+try_into!(u8);
+try_into!(u16);
+try_into!(usize);
 
-// try_into!(i8);
-// try_into!(i16);
-// try_into!(i32);
-// try_into!(isize);
+try_into!(i8);
+try_into!(i16);
+try_into!(i32);
+try_into!(isize);
 
-// macro_rules! into {
-//     ($ty:ident) => {
-//         impl From<EntityIndex> for $ty {
-//             #[inline(always)]
-//             fn from(value: EntityIndex) -> Self {
-//                 value.get().into()
-//             }
-//         }
+macro_rules! into {
+    ($ty:ident) => {
+        impl From<EntityIndex> for $ty {
+            #[inline(always)]
+            fn from(value: EntityIndex) -> Self {
+                value.get().into()
+            }
+        }
 
-//         impl TryFrom<EntityIndex> for NonZero<$ty> {
-//             type Error = TryFromIntError;
+        impl TryFrom<EntityIndex> for NonZero<$ty> {
+            type Error = TryFromIntError;
 
-//             #[inline(always)]
-//             fn try_from(value: EntityIndex) -> Result<Self, Self::Error> {
-//                 NonZero::try_from(value.get()).map(From::from)
-//             }
-//         }
-//     };
-// }
+            #[inline(always)]
+            fn try_from(value: EntityIndex) -> Result<Self, Self::Error> {
+                NonZero::try_from(value.get()).map(From::from)
+            }
+        }
+    };
+}
 
-// into!(u32);
-// into!(u64);
-// into!(u128);
+into!(u32);
+into!(u64);
+into!(u128);
 
-// into!(i64);
-// into!(i128);
+into!(i64);
+into!(i128);
